@@ -34,82 +34,19 @@ This pipeline has been implemented in:
 
 **Method** : pcl_callback(pcl_msg)
 
-The following is a snippet of the code:
+**Steps**
 
-```python=
-# Callback function for Point Cloud Subscriber
-def pcl_callback(pcl_msg):
+- The ROS message was first converted to PCL data. Doing this helps to apply various particle cloud filters as mentioned below.
 
-    # Convert ROS msg to PCL data
-    cloud = ros_to_pcl(pcl_msg)
+- **Filter #1 : Statistical Outlier Filter** : Since the RGBD camera output is noisy, this filter helps to remove some noise from the particle cloud. The "mean_k" parameter was set to 3 (i.e. 3 neighbouring points used for detecting outliers) and the threshold scale factor was set to 0.1. Any point with a mean distance larger than global (mean distance+x*std_dev) will be considered outlier by this filter and be removed.
 
-    # Filter #1 : Apply statistical outlier filter to remove noise
-    outlier_filter = cloud.make_statistical_outlier_filter()
-    # Set the number of neighboring points to analyze for any given point
-    outlier_filter.set_mean_k(3)
-    # Set threshold scale factor
-    x = 0.1
-    # Any point with a mean distance larger than global (mean distance+x*std_dev) will be considered outlier
-    outlier_filter.set_std_dev_mul_thresh(x)
-    cloud_filtered = outlier_filter.filter()
+- **Filter #2 : Voxel Grid Downsampling** : This filter reduces the number of points in the point cloud. This in turn helps to reduce the processing power and memory footprint required for further analysis. The parameter LEAF_SIZE was set to 0.01 as it had the best balance between speed and accuracy.
 
-    # Filter #2 : Voxel Grid Downsampling
-    # Create a VoxelGrid filter object for our input point cloud
-    vox = cloud_filtered.make_voxel_grid_filter()
-    # Choose a voxel (also known as leaf) size
-    LEAF_SIZE = 0.01
-    # Set the voxel (or leaf) size  
-    vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
-    # Call the filter function to obtain the resultant downsampled point cloud
-    cloud_filtered = vox.filter()
+- **Filter #3 : Pass through filter** The pass through filter helps to filter out regions by only keeping points within a range of the given Axis. Two different pass through filters were applied : one for the Z-Axis and another one for the Y-Axis. The Z-Axis filter has a threshold of (0.6 to 1.1) and is used to exclude the parts of the scene away from the objects of interest. The Y-Axis filter has a threshold of (-0.5 to +0.5) and is used to remove the drop boxes from the point cloud.
 
-    # Filter #3 : PassThrough Filter for Z-Axis
-    # Create a PassThrough filter object.
-    passthrough = cloud_filtered.make_passthrough_filter()
-    # Assign axis and range to the passthrough filter object.
-    filter_axis = 'z'
-    passthrough.set_filter_field_name(filter_axis)
-    axis_min = 0.6
-    axis_max = 1.1
-    passthrough.set_filter_limits(axis_min, axis_max)
-    # Finally use the filter function to obtain the resultant point cloud. 
-    cloud_filtered = passthrough.filter()
+- **Filter #4 : RANSAC Plane Segmentation** : This filter finds all the points within a point cloud that support a plane model. This helped to filter out the table from the objects as the table conforms to the model of a plane. A model type of 'SACMODEL_PLANE' and method type 'SAC_RANSAC' having max_distance '0.01' worked well as parameters for this filter. 
 
-    # Filter #4 : PassThrough Filter for Y-Axis
-    # Create a PassThrough filter object.
-    passthrough = cloud_filtered.make_passthrough_filter()
-    # Assign axis and range to the passthrough filter object.
-    filter_axis = 'y'
-    passthrough.set_filter_field_name(filter_axis)
-    axis_min = -0.5
-    axis_max = 0.5
-    passthrough.set_filter_limits(axis_min, axis_max)
-    # Finally use the filter function to obtain the resultant point cloud. 
-    cloud_filtered = passthrough.filter()
-
-    # Filter #5 : RANSAC Plane Segmentation
-    # Create the segmentation object
-    seg = cloud_filtered.make_segmenter()
-    # Set the model you wish to fit 
-    seg.set_model_type(pcl.SACMODEL_PLANE)
-    seg.set_method_type(pcl.SAC_RANSAC)
-    # Max distance for a point to be considered fitting the model
-    max_distance = 0.01 # 0.01
-    seg.set_distance_threshold(max_distance)
-    # Call the segment function to obtain set of inlier indices and model coefficients
-    inliers, coefficients = seg.segment()
-    # Extract inliers (that contains only objects and no table points)
-    cloud_objects = cloud_filtered.extract(inliers, negative=True)
-```
-
-As implemented above, the following filters were used:
-1. Statistical Outlier Filter
-2. Voxel Grid Downsampling
-3. Passthrough filter for Z-Axis
-4. Passthrough filter for Y-Axis
-5. RANSAC Plane Segmentation
-
-Thresholds for each filter was found by running the simulation in Gazebo and visualizing the point cloud in RViz.
+The thresholds for each filter were found by running the simulation in Gazebo and visualizing the point cloud in RViz.
 
 ### 2. DBSCAN Clustering Pipeline
 
@@ -118,6 +55,17 @@ This pipeline has been implemented in:
 **File** : [pick_place_project.py](./code/pick_place_project.py)
 
 **Method** : pcl_callback(pcl_msg)
+
+With the help of DBSCAN, the point cloud was clustered into distinct clusters, each corresponding to the object that was to be picked by the PR2 robot arm. The ability of DBSCAN to perform clustering without specifying the no. of clusters, proved to be very useful.
+
+The following parameters were used for this filter:
+ - Cluster tolerance = 0.02
+ - Min Cluster Size = 50
+ - Max Cluster Size = 10000
+
+For visualization purposes, 
+
+**Code snippet :**
 
 ```python=
     # Euclidean Clustering (DBSCAN)
@@ -153,8 +101,6 @@ This pipeline has been implemented in:
     cluster_cloud.from_list(color_cluster_point_list)
 ```
 
-With the help of DBSCAN, the point cloud was clustered into distinct clusters, each corresponding to the object that was to be picked by the PR2 robot arm. The ability of DBSCAN to perform clustering without specifying the no. of clusters, proved to be very useful.
-
 ### 3. Pipeline for feature extraction and training
 
 The pipeline has been implemented in the following files:
@@ -168,13 +114,17 @@ The pipeline has been implemented in the following files:
 **SVM Training**:
 - [train_svm.py](./code/train_svm.py)
 
-**The features that have been used are**: 
- - Color histograms
- - Normal histograms
+**Features used for SVM:** 
+ - Color histograms (bin range 0 to 256)
+ - Normal histograms (bin range -1 to +1)
+
+The bin size for both of these histograms was set to 32. Having too small or too large of a bin size affected the accuracy when testing it in the actual environments.
 
 The **SVM kernel** that was found to give the best result is: **RBF Kernel**
 
-To train this SVM, 50 instances of each object (in a random orientation) was spawned in Gazebo and the features were computed and fitted to the SVM classifier.
+To train this SVM, 75 instances of each object (in a random orientation) was spawned in Gazebo and the features were computed and fitted to the SVM classifier.
+
+It was found that the accuracy of the detected model could be improved greatly by increasing the number of instances spawned (i.e. the training sample). A count of 75 instances (= 75 * 8 = 600 samples) resulted in a total training time of around 30 mins.
 
 The normalized confusion matrix after training is the following:
 
@@ -186,6 +136,14 @@ The object classification pipeline is present in:
 
 **File**: [pick_place_project.py](./code/pick_place_project.py) 
 **Method**: pcl_callback(pcl_msg)
+
+The previously trained SVM classifier model that was dumped using pickle is loaded in this pipeline and is then used to recognize the objects.
+
+For feature extraction, the color and normal histograms are computed and fed to the saved SVM model for classification of the objects.
+
+The names of the object predicted are published to a dedicated ROS topic : '/detected_objects'. This makes it easier to debug and visualize the predictions in RViz.
+
+**Code snippet:**
 
 ```python=
     # Object classification
@@ -230,8 +188,6 @@ The object classification pipeline is present in:
     rospy.loginfo('Detected {} objects: {}'.format(len(detected_objects_labels), detected_objects_labels))
 ```
 
-The previously trained SVM classifier model that was dumped using pickle is loaded in this pipeline and is then used to recognize the objects.
-
 ### 5. Pick and Place by controlling arms of PR2 Robot
 
 The PR2 robot arm pick and place pipeline is coded in:
@@ -239,91 +195,13 @@ The PR2 robot arm pick and place pipeline is coded in:
 **File**: [pick_place_project.py](./code/pick_place_project.py) 
 **Method**: pr2_mover(detected_objects)
 
-```python=
-def pr2_mover(detected_objects):
+The list of all objects to be picked up is obtained from the ROS parameter server having key as '/object_list'.
 
-    """Function to load parameters and request PickPlace service"""
+Similarly, the details of the name and location of each dropbox is obtained from the ROS parameter '/dropbox'.
 
-    # Initialize variables
-    labels = []
-    centroids = [] # to be list of tuples (x, y, z)
+For each detected object, the centroid of the object is computed. This information is used to create the 'Pick' and 'Pose' ROS messages. These messages are then sent over to the ROS service 'pick_place_routine' to move the PR2 robot arms.
 
-    yaml_dict_list = []
-
-    # Get/Read parameters
-    pick_list = rospy.get_param('/object_list')
-
-    # If object detection isn't robust enough, skip this cycle
-    if len(pick_list) != len(detected_objects):
-        print "Ignoring cycle. Pickup size : %d, Detected size : %d" % (len(pick_list), len(detected_objects))
-        return
-
-    detected_obj_dict = {}
-    for det_obj in detected_objects:
-        detected_obj_dict[det_obj.label] = det_obj
-
-    dropbox_param = rospy.get_param('/dropbox')
-    dropbox_group_dict = {}
-    for dropbox_obj in dropbox_param:
-        dropbox_group_dict[dropbox_obj['group']] = dropbox_obj
-
-    # Get test scene number
-    test_scene_number = Int32()
-    test_scene_number.data = rospy.get_param('/test_scene_number')
-
-    # Loop through the pick list
-    for pick_obj in pick_list:
-
-        detected_obj = detected_obj_dict[pick_obj['name']]
-
-        # Get the PointCloud for a given object and obtain it's centroid
-        label = detected_obj.label
-        object_name = String()
-        object_name.data = pick_obj['name']
-        
-        points_arr = ros_to_pcl(detected_obj.cloud).to_array()
-        centroid = np.mean(points_arr, axis=0)[:3]
-        group = pick_obj['group']
-
-        # Create Pick Pose
-        pick_pose = Pose()
-        pick_pose.position = Point()
-        pick_pose.position.x = np.asscalar(centroid[0])
-        pick_pose.position.y = np.asscalar(centroid[1])
-        pick_pose.position.z = np.asscalar(centroid[2])
-
-        # Create 'place_pose' for the object
-        place_pose = Pose()
-        place_pose.position = Point()
-        place_pose.position.x = dropbox_group_dict[group]['position'][0]
-        place_pose.position.y = dropbox_group_dict[group]['position'][1]
-        place_pose.position.z = dropbox_group_dict[group]['position'][2]
-
-        # Assign the arm to be used for pick_place
-        arm_name = String()
-        arm_name.data = dropbox_group_dict[group]['name']
-
-        # Create a YAML dictionary
-        yaml_dict = make_yaml_dict(test_scene_number, arm_name, object_name, pick_pose, place_pose)
-        yaml_dict_list.append(yaml_dict)
-
-        # Wait for 'pick_place_routine' service to come up
-        rospy.wait_for_service('pick_place_routine')
-        try:
-            pick_place_routine = rospy.ServiceProxy('pick_place_routine', PickPlace)
-            # Insert message variables to be sent as a service request
-            resp = pick_place_routine(test_scene_number, object_name, arm_name, pick_pose, place_pose)
-            print ("Response: ",resp.success)
-        except rospy.ServiceException, e:
-            print "Service call failed: %s"%e
-
-    # Output request parameters into output yaml file
-    yaml_output_filename = '/home/robond/catkin_ws/output_%d.yaml' % (test_scene_number.data)
-    send_to_yaml(yaml_output_filename, yaml_dict_list)
-    print "Yaml output saved at : %s" % (yaml_output_filename)
-```
-
-The relevant parameters are loaded from the ROS parameter server and together with the detected object positions, is used to form the request messages required for sending pick and place instructions to the PR2 Robot arms.
+For debugging purposes, and also to satisfy the Udacity project requirements, these Pick and Pose messages were dumped into output YAML files.
 
 #### Results of object recognition and pick-place requests
 

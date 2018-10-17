@@ -91,7 +91,6 @@ y_train = encoder.fit_transform(y_train)
 
 
 clf = svm.SVC(kernel='rbf')
-#clf = svm.SVC(kernel='linear', C=2)
 
 # Set up 5-fold cross-validation
 kf = cross_validation.KFold(len(X_train),

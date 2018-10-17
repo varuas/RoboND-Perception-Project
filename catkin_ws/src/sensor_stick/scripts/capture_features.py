@@ -38,7 +38,7 @@ if __name__ == '__main__':
     labeled_features = []
 
     progress = 0
-    records_per_model = 50
+    records_per_model = 75
     for model_name in models:
 
         print("Spawning model:", model_name)
@@ -73,4 +73,3 @@ if __name__ == '__main__':
 
 
     pickle.dump(labeled_features, open('training_set.sav', 'wb'))
-

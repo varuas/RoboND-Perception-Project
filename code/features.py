@@ -45,7 +45,7 @@ def compute_color_histograms(cloud, using_hsv=False, nbins=32, bins_range=(0, 25
     return normed_features 
 
 
-def compute_normal_histograms(normal_cloud, nbins=32, bins_range=(0, 256)):
+def compute_normal_histograms(normal_cloud, nbins=32, bins_range=(-1, 1)):
     norm_x_vals = []
     norm_y_vals = []
     norm_z_vals = []

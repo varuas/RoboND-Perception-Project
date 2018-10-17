@@ -47,7 +47,7 @@ def send_to_yaml(yaml_filename, dict_list):
     with open(yaml_filename, 'w') as outfile:
         yaml.dump(data_dict, outfile, default_flow_style=False)
 
-# Callback function for your Point Cloud Subscriber
+# Callback function for Point Cloud Subscriber
 def pcl_callback(pcl_msg):
 
     ### Part 1 : Object Segmentation
@@ -278,14 +278,14 @@ def pr2_mover(detected_objects):
         yaml_dict_list.append(yaml_dict)
 
         # Wait for 'pick_place_routine' service to come up
-        # rospy.wait_for_service('pick_place_routine')
-        # try:
-        #     pick_place_routine = rospy.ServiceProxy('pick_place_routine', PickPlace)
-        #     # Insert message variables to be sent as a service request
-        #     resp = pick_place_routine(test_scene_number, object_name, arm_name, pick_pose, place_pose)
-        #     print ("Response: ",resp.success)
-        # except rospy.ServiceException, e:
-        #    print "Service call failed: %s"%e
+        rospy.wait_for_service('pick_place_routine')
+        try:
+            pick_place_routine = rospy.ServiceProxy('pick_place_routine', PickPlace)
+            # Insert message variables to be sent as a service request
+            resp = pick_place_routine(test_scene_number, object_name, arm_name, pick_pose, place_pose)
+            print ("Response: ",resp.success)
+        except rospy.ServiceException, e:
+            print "Service call failed: %s" % (e)
 
     # Output request parameters into output yaml file
     yaml_output_filename = '/home/robond/catkin_ws/output_%d.yaml' % (test_scene_number.data)
