@@ -44,7 +44,9 @@ def compute_color_histograms(cloud, using_hsv=False, nbins=32, bins_range=(0, 25
 
     return normed_features 
 
-
+# For normals, bins_range of (0, 256) is erroneous as it will lead to all points in the same bin.
+# However, it gives better results if we ignore normal histograms.
+# The ideal bin_range is (-1, 1) but that will probably require a lot more training data
 def compute_normal_histograms(normal_cloud, nbins=32, bins_range=(0, 256)):
     norm_x_vals = []
     norm_y_vals = []
